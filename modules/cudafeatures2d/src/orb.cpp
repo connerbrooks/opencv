@@ -746,13 +746,15 @@ namespace
         keyPointsCount_.resize(nLevels_);
 
         fastDetector_->setThreshold(fastThreshold_);
+        Stream streams[nLevels_];
 
         for (int level = 0; level < nLevels_; ++level)
         {
+            streams[level] = Stream();
             fastDetector_->setMaxNumPoints(0.05 * imagePyr_[level].size().area());
 
             GpuMat fastKpRange;
-            fastDetector_->detectAsync(imagePyr_[level], fastKpRange, maskPyr_[level], stream);
+            fastDetector_->detectAsync(imagePyr_[level], fastKpRange, maskPyr_[level], streams[level]);
 
             keyPointsCount_[level] = fastKpRange.cols;
 
@@ -760,24 +762,24 @@ namespace
                 continue;
 
             ensureSizeIsEnough(3, keyPointsCount_[level], fastKpRange.type(), keyPointsPyr_[level]);
-            fastKpRange.copyTo(keyPointsPyr_[level].rowRange(0, 2), stream);
+            fastKpRange.copyTo(keyPointsPyr_[level].rowRange(0, 2), streams[level]);
 
             const int n_features = static_cast<int>(n_features_per_level_[level]);
 
             if (scoreType_ == ORB::HARRIS_SCORE)
             {
                 // Keep more points than necessary as FAST does not give amazing corners
-                cull(keyPointsPyr_[level], keyPointsCount_[level], 2 * n_features, stream);
+                cull(keyPointsPyr_[level], keyPointsCount_[level], 2 * n_features, streams[level]);
 
                 // Compute the Harris cornerness (better scoring than FAST)
-                HarrisResponses_gpu(imagePyr_[level], keyPointsPyr_[level].ptr<short2>(0), keyPointsPyr_[level].ptr<float>(1), keyPointsCount_[level], 7, HARRIS_K, StreamAccessor::getStream(stream));
+                HarrisResponses_gpu(imagePyr_[level], keyPointsPyr_[level].ptr<short2>(0), keyPointsPyr_[level].ptr<float>(1), keyPointsCount_[level], 7, HARRIS_K, StreamAccessor::getStream(streams[level]));
             }
 
             //cull to the final desired level, using the new Harris scores or the original FAST scores.
-            cull(keyPointsPyr_[level], keyPointsCount_[level], n_features, stream);
+            cull(keyPointsPyr_[level], keyPointsCount_[level], n_features, streams[level]);
 
             // Compute orientation
-            IC_Angle_gpu(imagePyr_[level], keyPointsPyr_[level].ptr<short2>(0), keyPointsPyr_[level].ptr<float>(2), keyPointsCount_[level], half_patch_size, StreamAccessor::getStream(stream));
+            IC_Angle_gpu(imagePyr_[level], keyPointsPyr_[level].ptr<short2>(0), keyPointsPyr_[level].ptr<float>(2), keyPointsCount_[level], half_patch_size, StreamAccessor::getStream(streams[level]));
         }
     }
 
